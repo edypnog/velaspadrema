@@ -1,0 +1,12 @@
+# Arquivo de segredos
+.env
+
+# Banco de dados (não deve ir para o GitHub)
+vela_virtual.db
+
+# Pastas de cache do Python
+__pycache__/
+
+# Pasta de ambiente virtual (se você usa)
+.venv/
+venv/
