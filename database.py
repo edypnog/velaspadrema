@@ -1,7 +1,8 @@
 import sqlite3
 import datetime
 
-DB_NAME = "vela_virtual.db"
+# DB_NAME = "vela_virtual.db"
+DB_NAME = "/data/vela_virtual.db"
 
 
 def init_db():
