@@ -5,8 +5,8 @@ import re
 import datetime
 from dotenv import load_dotenv
 
-from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
+from telegram import Update, BotCommand
+from telegram.ext import Application, CommandHandler, ContextTypes
 from telegram.constants import ParseMode
 
 import database
@@ -15,54 +15,6 @@ from config import CANDLE_GIFS
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
-
-CANDLES_PER_PAGE = 10  # Velas por página
-MAX_PAGES = 5  # Máximo de páginas a serem exibidas (limite de 50 velas)
-MAX_ITEMS = CANDLES_PER_PAGE * MAX_PAGES
-
-
-def _render_candle_list(velas, current_page, total_items, total_pages):
-    """
-    Função auxiliar para construir a mensagem e o teclado de paginação.
-    Retorna (texto, teclado_inline).
-    """
-    if not velas:
-        return (
-            "Nenhuma vela acesa nesta página. Use /vela para acender a primeira! 🔥",
-            None,
-        )
-
-    # 1. Constrói o texto
-    message = f"🕯️ *Velas acesas: Página {current_page} de {total_pages}*\n\n"
-    for vela in velas:
-        safe_name = escape_markdown_v2(vela["user_name"])
-        safe_purpose = escape_markdown_v2(vela["purpose"])
-        message += f"`ID: {vela['id']:<3}` \\- *De:* {safe_name}\n"
-        message += f"> {safe_purpose}\n\n"
-
-    # 2. Constrói o teclado
-    row = []
-
-    # Botão Anterior
-    if current_page > 1:
-        row.append(
-            InlineKeyboardButton("⬅️ Anterior", callback_data=f"list_{current_page - 1}")
-        )
-
-    # Indicador de Página (Não faz nada)
-    row.append(
-        InlineKeyboardButton(
-            f"Página {current_page}/{total_pages}", callback_data="none"
-        )
-    )
-
-    # Botão Próximo
-    if current_page < total_pages:
-        row.append(
-            InlineKeyboardButton("Próximo ➡️", callback_data=f"list_{current_page + 1}")
-        )
-
-    return message, InlineKeyboardMarkup([row])
 
 
 def escape_markdown_v2(text: str) -> str:
@@ -136,87 +88,23 @@ async def vela(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def listar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 1. Tenta obter a página a partir dos argumentos (e valida)
-    page = 1
-    if context.args:
-        try:
-            page = max(1, int(context.args[0]))
-        except ValueError:
-            pass  # Permanece na página 1
-
-    # 2. Calcula limites
-    total_items = database.get_total_candles_count()
-
-    # Limita o total de páginas ao máximo exigido (5)
-    total_pages_disponiveis = (total_items + CANDLES_PER_PAGE - 1) // CANDLES_PER_PAGE
-    total_pages = min(MAX_PAGES, total_pages_disponiveis)
-
-    if total_items == 0:
+    velas = database.get_all_candles()
+    if velas is None:
+        logging.error("Falha ao buscar velas no banco de dados.")
+        return
+    if not velas:
         await update.message.reply_text(
             "Nenhuma vela acesa no momento\\. Use `/vela` para acender a primeira\\! 🔥",
             parse_mode=ParseMode.MARKDOWN_V2,
         )
         return
-
-    # 3. Garante que a página não excede o limite
-    if page > total_pages:
-        page = total_pages
-
-    # 4. Calcula offset e busca os dados
-    offset = (page - 1) * CANDLES_PER_PAGE
-    velas = database.get_paginated_candles(CANDLES_PER_PAGE, offset)
-
-    if velas is None:
-        logging.error("Falha ao buscar velas paginadas no banco de dados.")
-        await update.message.reply_text(
-            "Ocorreu um erro ao buscar velas no banco de dados\\.",
-            parse_mode=ParseMode.MARKDOWN_V2,
-        )
-        return
-
-    # 5. Renderiza e envia a resposta
-    message, reply_markup = _render_candle_list(velas, page, total_items, total_pages)
-
-    await update.message.reply_text(
-        message, parse_mode=ParseMode.MARKDOWN_V2, reply_markup=reply_markup
-    )
-
-
-async def pagination_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Lida com cliques nos botões de paginação."""
-    query = update.callback_query
-    await query.answer()  # Fecha o aviso de carregamento no Telegram
-
-    # Extrai o número da nova página do dado de callback ("list_X")
-    try:
-        page = int(query.data.split("_")[1])
-    except (IndexError, ValueError):
-        return
-
-    # Repete a lógica de limite e busca para a nova página
-    total_items = database.get_total_candles_count()
-    total_pages_disponiveis = (total_items + CANDLES_PER_PAGE - 1) // CANDLES_PER_PAGE
-    total_pages = min(MAX_PAGES, total_pages_disponiveis)
-
-    if page > total_pages:
-        page = total_pages
-
-    offset = (page - 1) * CANDLES_PER_PAGE
-    velas = database.get_paginated_candles(CANDLES_PER_PAGE, offset)
-
-    if velas is None:
-        logging.error("Falha ao buscar velas paginadas via callback.")
-        return
-
-    # Renderiza e edita a mensagem original
-    message, reply_markup = _render_candle_list(velas, page, total_items, total_pages)
-
-    # Usa edit_message_caption pois a mensagem original tem um cabeçalho
-    await query.edit_message_caption(
-        caption=message,
-        parse_mode=ParseMode.MARKDOWN_V2,
-        reply_markup=reply_markup,
-    )
+    message = "🕯️ *Últimas velas acesas:*\n\n"
+    for vela in velas:
+        safe_name = escape_markdown_v2(vela["user_name"])
+        safe_purpose = escape_markdown_v2(vela["purpose"])
+        message += f"`ID: {vela['id']:<3}` \\- *De:* {safe_name}\n"
+        message += f"> {safe_purpose}\n\n"
+    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN_V2)
 
 
 async def ver(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -380,10 +268,6 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("vela", vela))
     application.add_handler(CommandHandler("listar", listar))
-    # O padrão r'^list_\d+$' garante que só responde a cliques nos botões de paginação
-    application.add_handler(
-        CallbackQueryHandler(pagination_callback, pattern=r"^list_\d+$")
-    )
     application.add_handler(CommandHandler("ver", ver))
     application.add_handler(CommandHandler("minhasvelas", minhasvelas))
     application.add_handler(CommandHandler("excluir", excluir))
