@@ -62,6 +62,39 @@ def get_all_candles(limit=20):
         return None
 
 
+def get_paginated_candles(limit, offset):
+    """Busca velas com limite e offset para paginação."""
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        # O OFFSET é essencial para pular os itens das páginas anteriores
+        cursor.execute(
+            "SELECT * FROM velas ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        )
+        velas = cursor.fetchall()
+        conn.close()
+        # Garante que o formato de retorno é consistente
+        return [dict(vela) for vela in velas]
+    except Exception as e:
+        print(f"Erro ao buscar velas paginadas: {e}")
+        return None
+
+
+def get_total_candles_count():
+    """Conta o número total de velas para calcular o total de páginas."""
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        count = cursor.execute("SELECT COUNT(id) FROM velas").fetchone()[0]
+        conn.close()
+        return count
+    except Exception as e:
+        print(f"Erro ao contar velas: {e}")
+        return 0
+
+
 def get_candle_by_id(candle_id):
     """Busca uma vela específica pelo seu ID."""
     try:
